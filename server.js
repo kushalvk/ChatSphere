@@ -29,7 +29,7 @@ async function openRouterRequest(prompt) {
     });
     const data = await res.json();
     let content = data.choices?.[0]?.message?.content || "";
-    
+
     // Clean JSON from potential markdown/chatty text
     content = content.trim();
     if (content.includes("```")) {
@@ -274,7 +274,7 @@ async function initDb() {
         created_at TIMESTAMP  DEFAULT NOW()
       );
     `);
-    try { await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_username ON memories(username);'); } catch(e) {}
+    try { await pool.query('CREATE INDEX IF NOT EXISTS idx_memories_username ON memories(username);'); } catch (e) { }
 
     // Edit/Delete flags
     try { await pool.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;'); } catch (e) { }
@@ -395,7 +395,7 @@ io.on("connection", (socket) => {
 
       const dbId = res.rows[0].id;
       let broadcastData = { ...data, id: dbId, tempId: tempId, status: finalStatus };
-      
+
       // Emit immediately to sender
       io.to(socket.id).emit("receive_message", broadcastData);
 
@@ -412,7 +412,7 @@ io.on("connection", (socket) => {
           senderLang = (typeof detectedCode === 'string' ? detectedCode.trim().toLowerCase() : (detectedCode?.language || 'en')).substring(0, 5);
 
           // Update DB with detected language
-          await pool.query("UPDATE messages SET language = $1 WHERE id = $2", [senderLang, dbId]).catch(e => {});
+          await pool.query("UPDATE messages SET language = $1 WHERE id = $2", [senderLang, dbId]).catch(e => { });
 
           // If recipient language is different, translate
           if (senderLang !== recipientLang) {
@@ -420,7 +420,7 @@ io.on("connection", (socket) => {
             // Use same openRouterRequest but we need literal text back, not JSON usually?
             // Wait, openRouterRequest in server.js tries to JSON.parse(content).
             // I should add a literal request helper or adjust it.
-            
+
             const rawTranslationRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
               method: "POST",
               headers: {
@@ -438,9 +438,9 @@ io.on("connection", (socket) => {
             });
             const transData = await rawTranslationRes.json();
             translatedText = transData.choices?.[0]?.message?.content?.trim() || null;
-            
+
             if (translatedText) {
-              await pool.query("UPDATE messages SET translated = $1 WHERE id = $2", [translatedText, dbId]).catch(e => {});
+              await pool.query("UPDATE messages SET translated = $1 WHERE id = $2", [translatedText, dbId]).catch(e => { });
               // Broadcast translation update
               const transPayload = { id: String(dbId), translated: translatedText, language: senderLang };
               if (recipientSocketId) {
@@ -521,7 +521,7 @@ io.on("connection", (socket) => {
                    ORDER BY created_at DESC OFFSET 19
                 )`,
                 [from]
-              ).catch(() => {});
+              ).catch(() => { });
               await pool.query(
                 'INSERT INTO memories (username, content, category) VALUES ($1, $2, $3)',
                 [from, mem.memory, mem.category]
@@ -531,7 +531,7 @@ io.on("connection", (socket) => {
           }
         }
       })();
-      
+
       // ── AI Assistant (Copilot Mode - @ai trigger & Slash Commands) ──
       const lowerMsg = message.trim().toLowerCase();
       if (lowerMsg.startsWith("@ai") || lowerMsg.startsWith("/summarize") || lowerMsg.startsWith("/translate")) {
@@ -599,7 +599,7 @@ Return ONLY the answer. No explanation.`;
                 "INSERT INTO messages (from_user, to_user, message, timestamp, status, is_ai) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
                 ["AI Assistant", from, aiResponseText, new Date().toISOString(), 'sent', true]
               );
-              
+
               const aiDbId = aiMsgRes.rows[0].id;
               const aiPayload = {
                 id: aiDbId,
@@ -622,40 +622,40 @@ Return ONLY the answer. No explanation.`;
         // Direct private chat with AI
         (async () => {
           try {
-             // Fetch context from the private AI-user thread
-             const contextRes = await pool.query(
-                `SELECT from_user, message FROM messages 
+            // Fetch context from the private AI-user thread
+            const contextRes = await pool.query(
+              `SELECT from_user, message FROM messages 
                  WHERE ((from_user = $1 AND to_user = $2) OR (from_user = $2 AND to_user = $1))
                    AND is_deleted = FALSE ORDER BY timestamp DESC LIMIT 10`,
-                [from, "AI Assistant"]
-             );
-             const contextMsgs = contextRes.rows.reverse().map(r => `${r.from_user}: ${r.message}`).join("\n");
-             
-             const prompt = `You are a private AI Assistant helper.
+              [from, "AI Assistant"]
+            );
+            const contextMsgs = contextRes.rows.reverse().map(r => `${r.from_user}: ${r.message}`).join("\n");
+
+            const prompt = `You are a private AI Assistant helper.
 Conversation History:
 ${contextMsgs}
 
 Latest Message: "${message}"
 
 Help the user directly. Keep it concise. Return ONLY the answer.`;
-             
-             const aiResponseText = await openRouterRequest(prompt);
-             if (aiResponseText) {
-                const aiMsgRes = await pool.query(
-                  "INSERT INTO messages (from_user, to_user, message, timestamp, status, is_ai) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-                  ["AI Assistant", from, aiResponseText, new Date().toISOString(), 'sent', true]
-                );
-                
-                io.to(socket.id).emit("receive_message", {
-                  id: aiMsgRes.rows[0].id,
-                  from: "AI Assistant",
-                  to: from,
-                  message: aiResponseText,
-                  timestamp: new Date().toISOString(),
-                  status: 'sent',
-                  isAI: true
-                });
-             }
+
+            const aiResponseText = await openRouterRequest(prompt);
+            if (aiResponseText) {
+              const aiMsgRes = await pool.query(
+                "INSERT INTO messages (from_user, to_user, message, timestamp, status, is_ai) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                ["AI Assistant", from, aiResponseText, new Date().toISOString(), 'sent', true]
+              );
+
+              io.to(socket.id).emit("receive_message", {
+                id: aiMsgRes.rows[0].id,
+                from: "AI Assistant",
+                to: from,
+                message: aiResponseText,
+                timestamp: new Date().toISOString(),
+                status: 'sent',
+                isAI: true
+              });
+            }
           } catch (e) { console.error("Direct AI Chat error:", e); }
         })();
       }
@@ -720,7 +720,7 @@ Help the user directly. Keep it concise. Return ONLY the answer.`;
         "UPDATE messages SET message = 'This message was deleted', is_deleted = TRUE WHERE id = $1 AND from_user = $2",
         [id, from]
       );
-      
+
       // Notify both participants
       const msgRes = await pool.query("SELECT from_user, to_user FROM messages WHERE id = $1", [id]);
       if (msgRes.rows.length > 0) {
@@ -741,7 +741,7 @@ Help the user directly. Keep it concise. Return ONLY the answer.`;
         "UPDATE messages SET message = $1, is_edited = TRUE WHERE id = $2 AND from_user = $3 AND is_deleted = FALSE",
         [newContent, id, from]
       );
-      
+
       const msgRes = await pool.query("SELECT from_user, to_user FROM messages WHERE id = $1", [id]);
       if (msgRes.rows.length > 0) {
         const { from_user, to_user } = msgRes.rows[0];
@@ -779,9 +779,9 @@ Help the user directly. Keep it concise. Return ONLY the answer.`;
   });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 initDb().then(() => {
-  httpServer.listen(PORT, () => {
-    console.log(`Socket.io server running at http://localhost:${PORT}`);
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
   });
 }).catch(console.error);
