@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+//   previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+//   extensions = [pgvector(map: "vector")]
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique @db.VarChar(50)
+  password     String?   @db.VarChar(255)
+  phone        String?   @db.VarChar(20)
+  status       String?   @default("offline") @db.VarChar(20)
+  language     String?   @default("en") @db.VarChar(10)
+  is_verified  Boolean?  @default(false)
+  otp          String?   @db.VarChar(10)
+  otp_expiry   DateTime?
+  memories     Memory[]
+  
+  @@map("users")
+}
+
+model Message {
+  id           Int      @id @default(autoincrement())
+  from_user    String?  @db.VarChar(100)
+  to_user      String?  @db.VarChar(100)
+  message      String?  @db.Text
+  timestamp    DateTime? @default(now())
+  status       String?  @default("sent") @db.VarChar(20)
+  embedding    Unsupported("vector(768)")?
+  is_important Boolean? @default(false)
+  msg_type     String?  @default("normal") @db.VarChar(20)
+  confidence   Float?   @default(0)
+  emotion      String?  @default("neutral") @db.VarChar(20)
+  sentiment    String?  @default("neutral") @db.VarChar(20)
+  emotion_confidence Float? @default(0)
+  translated   String?  @db.Text
+  language     String?  @db.VarChar(10)
+  is_deleted   Boolean? @default(false)
+  is_edited    Boolean? @default(false)
+  is_ai        Boolean? @default(false)
+
+  @@map("messages")
+}
+
+model Memory {
+  id         Int      @id @default(autoincrement())
+  username   String   @db.VarChar(100)
+  content    String   @db.Text
+  category   String?  @default("other") @db.VarChar(30)
+  created_at DateTime? @default(now())
+  user       User     @relation(fields: [username], references: [username])
+
+  @@map("memories")
+}
+
+model ChatUserStatus {
+  id            Int      @id @default(autoincrement())
+  username      String   @db.VarChar(100)
+  chat_partner  String   @db.VarChar(100)
+  is_deleted    Boolean? @default(false)
+  deleted_at    DateTime? @default(now())
+
+  @@unique([username, chat_partner])
+  @@map("chat_user_status")
+}

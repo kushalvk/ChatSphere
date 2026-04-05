@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f0a14; /* Deep dark purple-black */
+  --foreground: #f4f4f5; /* Zinc 100 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Chat background pattern for Deep Purple aesthetic */
+.chat-bg {
+  background-color: #1a1025; /* Slightly lighter purple core */
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 4a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm-4 4a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm8-8a4 4 0 1 1 0-8 4 4 0 0 1 0 8z' fill='%239333ea' fill-opacity='0.08' fill-rule='evenodd'/%3E%3C/svg%3E");
+}
+
+/* Hide scrollbar for cleaner look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #4c1d95;
+  border-radius: 10px;
+}
+
+/* Utility: completely hidden scrollbar (used on smart-reply strip) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ensure main chat column never overflows viewport */
+.chat-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;        /* critical: allows flex children to shrink below content size */
+  overflow: hidden;
+}
+
+/* Messages area fills remaining space and scrolls internally */
+.chat-messages {
+  flex: 1 1 0;
+  min-height: 0;        /* critical: flex children overflow themselves, not parent */
+  overflow-y: auto;
+}
