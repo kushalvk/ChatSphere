@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
 
 export async function POST(req: NextRequest) {
+  // Guard: database must be configured
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { success: false, message: "Server configuration error: database not connected." },
+      { status: 503 }
+    );
+  }
+
   try {
     const { phone, otp, username } = await req.json();
 
@@ -12,9 +20,9 @@ export async function POST(req: NextRequest) {
     // 1. Fetch user by phone/username
     let userRes;
     if (username) {
-        userRes = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+      userRes = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
     } else {
-        userRes = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
+      userRes = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
     }
 
     if (userRes.rows.length === 0) {
@@ -39,14 +47,18 @@ export async function POST(req: NextRequest) {
       [user.id]
     );
 
-    return NextResponse.json({ 
-        success: true, 
-        message: "Mobile verified successfully",
-        is_verified: true
+    return NextResponse.json({
+      success: true,
+      message: "Mobile verified successfully",
+      is_verified: true,
     });
 
   } catch (error: any) {
     console.error("Verify OTP Error:", error);
-    return NextResponse.json({ success: false, message: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
+

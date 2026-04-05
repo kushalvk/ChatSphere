@@ -3,6 +3,14 @@ import axios from "axios";
 import pool from "@/lib/db";
 
 export async function POST(req: NextRequest) {
+  // Guard: database must be configured
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      { success: false, message: "Server configuration error: database not connected." },
+      { status: 503 }
+    );
+  }
+
   try {
     const { phone, username } = await req.json();
 
@@ -14,19 +22,34 @@ export async function POST(req: NextRequest) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    // 2. Save OTP to DB
-    // Assuming search by username if provided, or just update by phone if unique
+    // 2. UPSERT user — create if not exists, update OTP if exists
+    // The old code used UPDATE which silently failed for new users (0 rows affected).
     if (username) {
-        await pool.query(
-            "UPDATE users SET phone = $1, otp = $2, otp_expiry = $3, is_verified = FALSE WHERE username = $4",
-            [phone, otp, otpExpiry, username]
-        );
+      const result = await pool.query(
+        `INSERT INTO users (username, phone, otp, otp_expiry, is_verified)
+         VALUES ($1, $2, $3, $4, FALSE)
+         ON CONFLICT (username) DO UPDATE
+           SET phone        = EXCLUDED.phone,
+               otp          = EXCLUDED.otp,
+               otp_expiry   = EXCLUDED.otp_expiry,
+               is_verified  = FALSE
+         RETURNING id, username`,
+        [username, phone, otp, otpExpiry]
+      );
+      console.log(`[OTP] Upserted user: ${result.rows[0]?.username} (id: ${result.rows[0]?.id})`);
     } else {
-        // Find user by phone to update
-        await pool.query(
-            "UPDATE users SET otp = $1, otp_expiry = $2, is_verified = FALSE WHERE phone = $3",
-            [otp, otpExpiry, phone]
+      // No username — update by phone (existing users only)
+      const result = await pool.query(
+        `UPDATE users SET otp = $1, otp_expiry = $2, is_verified = FALSE
+         WHERE phone = $3 RETURNING id`,
+        [otp, otpExpiry, phone]
+      );
+      if (result.rowCount === 0) {
+        return NextResponse.json(
+          { success: false, message: "No account found with this phone number." },
+          { status: 404 }
         );
+      }
     }
 
     // 3. Send via Fast2SMS
